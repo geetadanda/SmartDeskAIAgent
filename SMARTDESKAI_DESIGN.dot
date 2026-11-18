@@ -1,0 +1,122 @@
+digraph SmartDeskAIChatDesign {
+  graph [
+    rankdir="LR",
+    bgcolor="#FFFFFF",
+    pad="0.35",
+    nodesep="0.42",
+    ranksep="0.7",
+    splines="polyline",
+    fontname="Helvetica",
+    fontsize="22",
+    labelloc="t",
+    label="SmartDeskAI — Chat, Retrieval, and Ticket Decision Flow"
+  ];
+  node [
+    shape="box",
+    style="rounded,filled",
+    fontname="Helvetica",
+    fontsize="10",
+    color="#64748B",
+    fillcolor="#F8FAFC",
+    fontcolor="#0F172A",
+    margin="0.16,0.11"
+  ];
+  edge [
+    color="#64748B",
+    fontname="Helvetica",
+    fontsize="9",
+    arrowsize="0.75"
+  ];
+
+  question [label="Signed-in employee\nsubmits chat question", shape="oval", fillcolor="#DBEAFE"];
+  history [label="Streamlit session history\nup to 10 recent turns", fillcolor="#DBEAFE"];
+  classify [label="OpenAI structured scope classifier\nuses question + recent turns", fillcolor="#FEF3C7"];
+  question -> history -> classify;
+
+  out_scope [label="Out of scope\nReturn [NO_ANSWER] scope message\nDo not invoke support tools\nDo not offer Jira ticket", fillcolor="#FEE2E2"];
+  unclear [label="Unclear relation to SmartHR\nAsk user to clarify\nNo tools · no ticket offer", fillcolor="#FEF3C7"];
+  in_scope [label="In scope\nIT · HR · payroll / compensation\nonboarding · policies\ndirectory · holidays", fillcolor="#DCFCE7"];
+  classify -> out_scope [label="out_of_scope"];
+  classify -> unclear [label="unclear"];
+  classify -> in_scope [label="supported domain"];
+
+  prompt [label="System prompt + question\n+ recent conversation", fillcolor="#DBEAFE"];
+  model [label="OpenAI chat model\n(default gpt-4o-mini)\nselect tool(s) or answer", fillcolor="#BFDBFE"];
+  tool_loop [label="Tool-calling loop\nexecute selected tool\nappend tool result\nrepeat, up to 5 iterations", fillcolor="#CFFAFE"];
+  in_scope -> prompt -> model;
+  model -> tool_loop [label="tool call"];
+  tool_loop -> model [label="tool result"];
+
+  subgraph cluster_retrieval {
+    label="Knowledge loaded on first chat request; indexes built in memory";
+    color="#4ADE80";
+    style="rounded";
+    bgcolor="#F0FDF4";
+
+    knowledge_files [label="JSON / JSONL knowledge\nhelpdesk · FAQ · HR / IT Q&A", shape="folder", fillcolor="#DCFCE7"];
+    policy_files [label="Markdown policy files\nsplit into headed sections", shape="folder", fillcolor="#DCFCE7"];
+    normalize [label="Normalize records\nquestion / subject + answer / description\nretain source, category, record ID", fillcolor="#DCFCE7"];
+    chunk [label="TokenTextSplitter\n2,048 tokens · 50 overlap", fillcolor="#DCFCE7"];
+    embedding [label="OpenAI embeddings\ntext-embedding-3-small", fillcolor="#FEF3C7"];
+    vector [label="VectorStoreIndex\nsemantic candidates", fillcolor="#CFFAFE"];
+    keyword [label="SimpleKeywordTableIndex\nkeyword candidates", fillcolor="#EDE9FE"];
+
+    knowledge_files -> normalize;
+    policy_files -> normalize;
+    normalize -> chunk;
+    chunk -> vector;
+    chunk -> keyword;
+    embedding -> vector [label="embed nodes"];
+  }
+
+  exact [label="Similar-record search\nfirst try normalized exact\nsubject match", fillcolor="#E0F2FE"];
+  sem_search [label="Semantic search\nTop 5 candidates", fillcolor="#CFFAFE"];
+  key_search [label="Keyword search\nTop 5 candidates", fillcolor="#EDE9FE"];
+  fusion [label="Reciprocal-rank fusion\nDeduplicate by record ID\nreturn top 3", fillcolor="#FEF3C7"];
+  policies [label="Policy search\nsemantic + keyword\npolicy records only", fillcolor="#DCFCE7"];
+  utilities [label="Other tools\nDirectory / manager lookup\nHoliday calendar / local ticket ID", fillcolor="#DBEAFE"];
+  jira_query [label="Jira query\nissue key or requester email", fillcolor="#FFE4E6"];
+
+  model -> exact [label="similar issue / knowledge"];
+  exact -> sem_search [label="no exact match"];
+  vector -> sem_search;
+  keyword -> key_search;
+  sem_search -> fusion;
+  key_search -> fusion;
+  model -> policies [label="policy question"];
+  vector -> policies;
+  keyword -> policies;
+  model -> utilities [label="directory / date / local ID"];
+  model -> jira_query [label="Jira status / list"];
+  exact -> tool_loop [label="exact answer"];
+  fusion -> tool_loop [label="ranked sources"];
+  policies -> tool_loop [label="policy evidence"];
+  utilities -> tool_loop [label="lookup result"];
+  jira_query -> tool_loop [label="Jira result"];
+
+  answered [label="Reliable in-scope answer\nReturn answer + tools used\nNo ticket offer", fillcolor="#DCFCE7"];
+  unresolved [label="In-scope unresolved answer\n[NO_ANSWER] marker\nneeds_ticket = true", fillcolor="#FEE2E2"];
+  clarify_content [label="Ask a follow-up\nor clarify ambiguity\nNo ticket offer", fillcolor="#FEF3C7"];
+  model -> answered [label="sufficient evidence"];
+  model -> unresolved [label="no reliable evidence"];
+  model -> clarify_content [label="needs clarification"];
+
+  ticket_offer [label="Support Chat form\nuser reviews details\nemail · summary · description\ncategory · priority", fillcolor="#FFE4E6"];
+  ticket_submit [label="User explicitly submits\nconfirmed ticket details", shape="diamond", fillcolor="#FEF3C7"];
+  jira_create [label="Create Jira issue\nREST API v3\nreturn issue key", fillcolor="#FFE4E6"];
+  unresolved -> ticket_offer [label="only in-scope no-answer"];
+  ticket_offer -> ticket_submit;
+  ticket_submit -> jira_create [label="submit"];
+
+  subgraph cluster_other_jira {
+    label="Separate manual Jira pages";
+    color="#F9A8D4";
+    style="rounded";
+    bgcolor="#FDF2F8";
+
+    log_page [label="Log Jira Issue page\nuser fills and submits form", fillcolor="#FCE7F3"];
+    query_page [label="Query Jira Issues page\nrequester email lookup", fillcolor="#FCE7F3"];
+    log_page -> jira_create;
+    query_page -> jira_query;
+  }
+}

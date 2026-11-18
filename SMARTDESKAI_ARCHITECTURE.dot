@@ -1,0 +1,107 @@
+digraph SmartDeskAIArchitecture {
+  graph [
+    rankdir="LR",
+    bgcolor="#FFFFFF",
+    pad="0.35",
+    nodesep="0.48",
+    ranksep="0.78",
+    splines="polyline",
+    fontname="Helvetica",
+    fontsize="22",
+    labelloc="t",
+    label="SmartDeskAI — Current Application Architecture"
+  ];
+  node [
+    shape="box",
+    style="rounded,filled",
+    fontname="Helvetica",
+    fontsize="10",
+    color="#64748B",
+    fillcolor="#F8FAFC",
+    fontcolor="#0F172A",
+    margin="0.17,0.12"
+  ];
+  edge [
+    color="#64748B",
+    fontname="Helvetica",
+    fontsize="9",
+    arrowsize="0.75"
+  ];
+
+  employee [label="Employee / admin\nWeb browser", shape="oval", fillcolor="#DBEAFE"];
+
+  subgraph cluster_application {
+    label="SmartDeskAI — one Python process / Streamlit app";
+    color="#60A5FA";
+    style="rounded";
+    bgcolor="#EFF6FF";
+
+    ui [label="Streamlit UI\nSupport Chat · Log / Query Jira\nDirectory · Holiday Calendar\nPolicy Documents · Employment Letters\nManage Users (admin)", fillcolor="#BFDBFE"];
+    auth [label="Authentication module\nArgon2id password hashes\nlogin throttling · active account checks\nsession version · admin role gates", fillcolor="#DBEAFE"];
+    chat [label="Support orchestration\nQuestion-scope classification\nLLM tool-calling loop (max 5)\nanswer / no-answer handling", fillcolor="#CFFAFE"];
+    retrieval [label="Knowledge retrieval\nExact subject lookup\nSemantic + keyword search\nReciprocal-rank fusion\nsource-bearing results", fillcolor="#CFFAFE"];
+    local_services [label="Self-service logic\nDirectory / org-chart lookups\nHoliday calendar\nPolicy browsing\nEmployment letter generation", fillcolor="#DBEAFE"];
+
+    employee -> ui [label="HTTPS browser session"];
+    ui -> auth [label="sign-in / session validation"];
+    auth -> ui [label="authenticated role"];
+    ui -> chat [label="chat question + recent turns"];
+    chat -> ui [label="answer + ticket eligibility"];
+    chat -> retrieval [label="in-scope knowledge request"];
+    retrieval -> chat [label="ranked records + sources"];
+    ui -> local_services [label="self-service page actions"];
+    local_services -> ui [label="page results / letter preview"];
+  }
+
+  subgraph cluster_localdata {
+    label="Local application data";
+    color="#4ADE80";
+    style="rounded";
+    bgcolor="#F0FDF4";
+
+    sqlite [label="SQLite account database\nusers · roles · password hashes\nlogin attempts · session version", shape="cylinder", fillcolor="#DCFCE7"];
+    kb_files [label="Knowledge sources\nJSON / JSONL records\nMarkdown policy sections", shape="folder", fillcolor="#DCFCE7"];
+    ref_files [label="Reference sources\nCSV directory · holiday calendar\nfictional verification test data", shape="folder", fillcolor="#DCFCE7"];
+    secrets [label="Runtime settings\nEnvironment / Streamlit secrets\nOpenAI · bootstrap admin · Jira", shape="folder", fillcolor="#FEF3C7"];
+
+    auth -> sqlite [dir="both", label="account operations"];
+    retrieval -> kb_files [dir="back", label="load on first chat request"];
+    local_services -> ref_files [dir="back", label="read CSV / Markdown data"];
+    chat -> secrets [dir="back", label="model configuration"];
+    local_services -> secrets [dir="back", label="integration settings"];
+  }
+
+  subgraph cluster_external {
+    label="External services";
+    color="#FBBF24";
+    style="rounded";
+    bgcolor="#FFFBEB";
+
+    openai [label="OpenAI APIs\nStructured scope classifier\nChat model: gpt-4o-mini by default\nEmbeddings: text-embedding-3-small", fillcolor="#FEF3C7"];
+    jira [label="Jira Cloud REST API v3\ncreate issue · query issue key\nlist project issues by requester", fillcolor="#FFE4E6"];
+
+    chat -> openai [dir="both", label="classify / chat / tool calls"];
+    retrieval -> openai [dir="both", label="embed and retrieve"];
+    chat -> jira [dir="both", label="assistant Jira tools (configured)"];
+    ui -> jira [dir="both", label="confirmed ticket form / Jira pages"];
+  }
+
+  subgraph cluster_evaluation {
+    label="Offline evaluation (separate CLI)";
+    color="#A78BFA";
+    style="rounded,dashed";
+    bgcolor="#F5F3FF";
+
+    eval_runner [label="smartHR_eval.py\ncustom LLM-as-judge", fillcolor="#EDE9FE"];
+    deepeval_runner [label="smartHR_deepeval.py\nfaithfulness · answer relevance\ncontextual precision / recall · F1\ncompleteness · structure", fillcolor="#EDE9FE"];
+    cases [label="evals/golden_cases.jsonl\nquestions + expected key points", shape="folder", fillcolor="#EDE9FE"];
+    reports [label="evals/results/*.json\nignored local reports", shape="folder", fillcolor="#EDE9FE"];
+
+    cases -> eval_runner;
+    cases -> deepeval_runner;
+    eval_runner -> chat [style="dashed", label="run agent; Jira tools stubbed"];
+    deepeval_runner -> chat [style="dashed", label="run agent; Jira tools stubbed"];
+    eval_runner -> reports;
+    deepeval_runner -> reports;
+  }
+}
