@@ -1,4 +1,23 @@
 
+# --- must be first: NLTK data setup (before any llama_index import) ---
+import os
+from pathlib import Path
+
+NLTK_DIR = Path.home() / "nltk_data"          # /home/appuser/nltk_data on Streamlit Cloud
+NLTK_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+os.chmod(NLTK_DIR, 0o700)                     # private to the app user, so NLTK trusts it
+os.environ["NLTK_DATA"] = str(NLTK_DIR)       # LlamaIndex uses this instead of its own cache
+
+import nltk
+if str(NLTK_DIR) not in nltk.data.path:
+    nltk.data.path.insert(0, str(NLTK_DIR))
+for pkg, path in [("stopwords", "corpora/stopwords"), ("punkt_tab", "tokenizers/punkt_tab")]:
+    try:
+        nltk.data.find(path)
+    except LookupError:
+        nltk.download(pkg, download_dir=str(NLTK_DIR), quiet=True)
+# --- end NLTK setup ---
+
 import calendar
 import csv
 import json
